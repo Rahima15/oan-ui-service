@@ -18,28 +18,25 @@ To get a local copy up and running, follow these simple steps.
 1. **Clone the repository:**
 
    ```sh
-   git clone <YOUR_GIT_URL>
+   git clone https://github.com/OpenAgriNet/oan-ui-service
    ```
-
 2. **Navigate to the project directory:**
 
    ```sh
-   cd <YOUR_PROJECT_NAME>
+   cd oan-ui-service
    ```
-
 3. **Install dependencies:**
 
    ```sh
    npm install
    ```
-
 4. **Start the development server:**
 
    ```sh
    npm run dev
    ```
 
-   The app will be available at the local address shown in your terminal (usually http://localhost:5173).
+   The app will be available at the local address shown in your terminal (usually http://localhost:8081).
 
 ## Editing the Code
 
