@@ -37,7 +37,8 @@ A React application with JWT-based authentication built with Vite, TypeScript, s
    ```
 
 4. **Access the application:**
-   - The app will be available at the local address shown in your terminal (usually http://localhost:5173)
+   - The app will be available at http://localhost:5173 (default Vite development server port)
+   - Port 5173 is the default for Vite and can be customized in `vite.config.ts` or via `--port` flag
    - **Important:** You need a valid JWT token to access the application
 
 ## JWT Authentication
@@ -74,6 +75,20 @@ Example JWT payload:
   "iss": "your-auth-service"
 }
 ```
+
+## API Services
+
+### Text-to-Speech (TTS)
+- **How it works:** Text messages are sent to `/api/tts/` endpoint with session ID and target language
+- **What's sent:** Response text, language preference (e.g., 'mr', 'hi', 'en'), and session identifier
+- **Response:** Base64-encoded audio data that gets played back to the user
+
+### Automatic Speech Recognition (ASR)
+- **How it works:** Audio is captured from user's microphone, converted to base64, and sent to `/api/transcribe/`
+- **What's sent:** Base64-encoded audio data along with the service identifier, and the session identifier  
+- **Response:** Transcribed text and detected language code for further processing
+
+All API calls require JWT authentication via Bearer token in headers.
 
 ## Demo Mode
 
@@ -126,12 +141,20 @@ Example JWT payload:
    }
    ```
 
-5. **Copy the generated JWT token**
+5. **Copy the generated JWT token from the left panel**
 
 6. **Visit your app with the token:**
    ```
    http://localhost:5173?token=YOUR_GENERATED_TOKEN
    ```
+
+#### Basic JWT Signing Instructions for jwt.io
+
+1. **Paste your private key** in the "Private Key" section (right panel)
+2. **Verify the public key** appears automatically in the "Public Key" section
+3. **Edit the payload** (middle section) with your desired claims
+4. **The encoded JWT** will appear in the left panel - copy this token
+5. **Important:** The signature will only be valid if the public/private key pair matches
 
 ### Alternative Online JWT Tools
 
@@ -215,7 +238,7 @@ src/
 
 ### Environment Variables
 
-You can customize JWT settings via environment variables:
+You can customize JWT settings and development server configuration via environment variables:
 
 ```bash
 # .env.local
@@ -232,7 +255,7 @@ VITE_JWT_ISSUER=your-auth-service
 
 2. **Test with the token:**
    ```bash
-   # Visit this URL in your browser
+   # Visit this URL in your browser (port 5173 is Vite's default)
    http://localhost:5173?token=YOUR_TEST_TOKEN
    ```
 
