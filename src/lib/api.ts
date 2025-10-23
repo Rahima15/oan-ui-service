@@ -110,27 +110,47 @@ class ApiService {
   }
 
   async sendUserQuery(
-    msg: string,
-    session: string,
-    sourceLang: string,
-    targetLang: string,
-    onStreamData?: (data: string) => void
-  ): Promise<ChatResponse> {
-    try {
-      this.refreshAuthToken();
-      if (!this.validateAuth()) {
-        return { response: "Authentication error", status: "error" };
-      }
-      
-      const params = {
-        session_id: session,
-        query: msg,
-        source_lang: sourceLang,
-        target_lang: targetLang,
-        ...(this.locationData && { location: `${this.locationData.latitude},${this.locationData.longitude}` })
-      };
+  msgOrFormData: string | FormData,
+  session: string,
+  sourceLang: string,
+  targetLang: string,
+  onStreamData?: (data: string) => void
+): Promise<ChatResponse> {
+  try {
+    this.refreshAuthToken();
+    if (!this.validateAuth()) {
+      return { response: "Authentication error", status: "error" };
+    }
 
-      const headers = this.getAuthHeaders();
+    const headers = this.getAuthHeaders();
+    const isFormData = msgOrFormData instanceof FormData;
+
+    // ✅ CASE 1 — Text + image (multipart upload)
+    if (isFormData) {
+      const response = await fetch(`${this.apiUrl}/api/chat/upload/`, {
+        method: "POST",
+        headers: {
+          Authorization: headers.Authorization, // Keep auth only
+        },
+        body: msgOrFormData, // sends text + image together
+      });
+
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+      const data = await response.json();
+      return { response: data.response || "Success", status: "success" };
+    }
+
+    // ✅ CASE 2 — Text only (streaming or normal request)
+    const params = {
+      session_id: session,
+      query: msgOrFormData,
+      source_lang: sourceLang,
+      target_lang: targetLang,
+      ...(this.locationData && {
+        location: `${this.locationData.latitude},${this.locationData.longitude}`,
+      }),
+    };
 
       if (onStreamData) {
         // Handle streaming response
