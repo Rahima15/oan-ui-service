@@ -45,7 +45,9 @@ interface Message {
   questionId?: string;
   questionText?: string;
   isErrorMessage?: boolean;
-    errorTranslationKey?: string;
+  isImage?: boolean;
+  imageUrl?: string;
+  errorTranslationKey?: string;
 }
 
 interface ChatResponse {
@@ -145,7 +147,6 @@ export function ChatInterface() {
   
 
 //camera
-
   const handleImageCapture = (file: File) => {
     setAttachedImage(file); // Save File object
   };
@@ -155,8 +156,6 @@ const handleCapture = (base64: string) => {
   const file = base64ToFile(base64, "camera-image.png");
   handleImageCapture(file); // Save as File, not base64
 };
-
-
 
   const { stopAudio } = useTts();
 
@@ -191,7 +190,6 @@ const handleCapture = (base64: string) => {
   if (attachedImage instanceof File) {
     objectUrl = URL.createObjectURL(attachedImage);
   }
-
   return () => {
     if (objectUrl) URL.revokeObjectURL(objectUrl);
   };
@@ -199,19 +197,33 @@ const handleCapture = (base64: string) => {
 
 
   // Helper functions for managing messages
-  const addMessage = (text: string, isUser: boolean, options = {}): string => {
-    const id = `${isUser ? 'user' : 'bot'}-${uuidv4()}`;
-    const newMessage: Message = {
-      id,
-      text,
-      isUser,
-      timestamp: new Date(),
-      ...options
-    };
-    
-    setMessages(prev => [...prev, newMessage]);
-    return id;
+const addMessage = (
+  text: string,
+  isUser: boolean,
+  options: {
+    isImage?: boolean;
+    imageUrl?: string;
+    isLoading?: boolean;
+    isErrorMessage?: boolean;
+  } = {}
+): string => {
+  const id = `${isUser ? "user" : "bot"}-${uuidv4()}`;
+
+  const newMessage: Message = {
+    id,
+    text,
+    isUser,
+    timestamp: new Date(),
+    isImage: options.isImage ?? false,
+    imageUrl: options.imageUrl ?? undefined,
+    isLoading: options.isLoading ?? false,
+    isErrorMessage: options.isErrorMessage ?? false,
   };
+
+  setMessages((prev) => [...prev, newMessage]);
+  return id;
+};
+
 
   const updateMessage = (id: string, updates: Partial<Message>) => {
     setMessages(prev =>
@@ -340,22 +352,33 @@ const handleCapture = (base64: string) => {
 const handleSendMessage = async () => {
   if (inputValue.trim() === "" && !attachedImage) return;
 
-  // 1️⃣ Show user message in chat immediately
+  // 1️⃣ Create a local preview URL for the attached image
+  let imagePreviewUrl: string | undefined = undefined;
+
+  if (attachedImage) {
+    if (attachedImage instanceof File) {
+      imagePreviewUrl = URL.createObjectURL(attachedImage);
+    } else if (typeof attachedImage === "string") {
+      imagePreviewUrl = attachedImage;
+    }
+  }
+
+  // 2️⃣ Show user's message with image + text in chat
   const userMessageId = addMessage(inputValue || "📷 Image", true, {
     isImage: !!attachedImage,
-    imageUrl: attachedImage || undefined,
+    imageUrl: imagePreviewUrl,
   });
 
-  // 2️⃣ Clear input and attached image immediately
+  //  Clear input and attached image immediately
   setInputValue("");
   setAttachedImage(null);
 
-  // 3️⃣ Add loading message for bot
+  //  Add loading message for bot
   const botMessageId = addMessage("", false, { isLoading: true });
   setIsMessageLoading(true);
 
   try {
-    // 4️⃣ Send the message (text or image) via your working API function
+    //  Send the message (text or image) via your working API function
     await sendMessageToApi(inputValue, botMessageId, attachedImage);
   } catch (error) {
     console.error("Error sending message:", error);
@@ -369,9 +392,6 @@ const handleSendMessage = async () => {
     setIsMessageLoading(false);
   }
 };
-
-
-
 
   // When an error occurs, ensure the UI updates completely
   const forceUIRefresh = () => {
@@ -388,7 +408,7 @@ const handleSendMessage = async () => {
   };
 
   // Core API communication function
-  const sendMessageToApi = async (text: string, loadingMessageId: string,    attachedImage?: File | string | null) => {
+  const sendMessageToApi = async (text: string, loadingMessageId: string, attachedImage?: File | string | null) => {
     // Determine target and source language
     const targetLang = language;
     let sourceLang = "en"; // Default source language
@@ -1047,32 +1067,35 @@ const handleSendMessage = async () => {
               "message-container",
               isMobile ? "space-y-4 px-2" : "space-y-4 px-4" // Increased spacing on mobile
             )}>
-              {messages.map((message) => (
-                <ChatMessage
-                  key={message.id}
-                  message={message.text}
-                  isUser={message.isUser}
-                  timestamp={message.timestamp}
-                  onDislike={
-                    !message.isUser && !message.isLoading && !message.isFeedbackMessage 
-                      ? (questionText: string, responseText: string) => handleDislike(message.id, message.questionText || "", message.text)
-                      : undefined
-                  }
-                  onLike={
-                    !message.isUser && !message.isLoading && !message.isFeedbackMessage 
-                      ? (questionText: string, responseText: string) => handleLike(message.id, message.questionText || "", message.text)
-                      : undefined
-                  }
-                  messageId={message.id}
-                  isLoading={message.isLoading}
-                  isStreaming={message.isStreaming}
-                  isFeedbackMessage={message.isFeedbackMessage}
-                  questionText={message.questionText}
-                  responseText={message.text}
-                  isErrorMessage={message.isErrorMessage}
-                  errorTranslationKey={message.errorTranslationKey}
-                />
-              ))}
+              
+             {messages.map((message) => (
+  <ChatMessage
+    key={message.id}
+    message={message.text} // Keep as text for ReactMarkdown
+    isUser={message.isUser}
+    timestamp={message.timestamp}
+    imageUrl={message.isImage ? message.imageUrl : undefined} // ✅ Pass image here
+    onDislike={
+      !message.isUser && !message.isLoading && !message.isFeedbackMessage 
+        ? (questionText: string, responseText: string) => handleDislike(message.id, message.questionText || "", message.text)
+        : undefined
+    }
+    onLike={
+      !message.isUser && !message.isLoading && !message.isFeedbackMessage 
+        ? (questionText: string, responseText: string) => handleLike(message.id, message.questionText || "", message.text)
+        : undefined
+    }
+    messageId={message.id}
+    isLoading={message.isLoading}
+    isStreaming={message.isStreaming}
+    isFeedbackMessage={message.isFeedbackMessage}
+    questionText={message.questionText}
+    responseText={message.text}
+    isErrorMessage={message.isErrorMessage}
+    errorTranslationKey={message.errorTranslationKey}
+  />
+))}
+
               <div ref={messagesEndRef} className="h-8" />
             </div>
           </div>
@@ -1114,35 +1137,34 @@ const handleSendMessage = async () => {
                   </div>
                 )}
                  
-
-<div
-  ref={inputContainerRef}
-  className="input-container"
-  style={{
-    position: 'relative',
-    padding: '12px',
-   
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  }}
->
-  {/* 📸 Image preview inside input container */}
-{attachedImage && (
-  <div className="relative mb-2 px-3">
-    <img
-      src={attachedImage instanceof File ? URL.createObjectURL(attachedImage) : attachedImage}
-      alt="preview"
-      className="w-32 h-32 object-cover rounded-lg border"
-    />
-    <button
-      onClick={() => setAttachedImage(null)}
-      className="absolute top-1 right-4 bg-black bg-opacity-50 text-white rounded-full p-1"
-    >
-      ✕
-    </button>
-  </div>
-)}
+                   
+                   <div
+                    ref={inputContainerRef}  //image container
+                    className="input-container"
+                    style={{
+                    position: 'relative',
+                    padding: '12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                  }}
+                   >
+              {/* 📸 Image preview inside input container */}
+              {attachedImage && (
+              <div className="relative mb-2 px-3">
+              <img
+                src={attachedImage instanceof File ? URL.createObjectURL(attachedImage) : attachedImage}
+                 alt="preview"
+                 className="w-32 h-32 object-cover rounded-lg border"
+               />
+                <button
+                  onClick={() => setAttachedImage(null)}
+                 className="absolute top-1 right-4 bg-black bg-opacity-50 text-white rounded-full p-1"
+                >
+                 ✕
+               </button>
+               </div>
+               )}
 
                 <div className="flex items-center gap-2 bg-background rounded-lg border border-border p-2">
                   <Textarea
@@ -1176,35 +1198,35 @@ const handleSendMessage = async () => {
                   </Button>
                     
                     
-  <Button
-    onClick={() => setShowCamera(true)} //camera
-    variant="outline"
-    size="icon"
-    className="rounded-full flex-shrink-0 h-9 w-9"
-  >
-    <Camera className="h-4 w-4" />
-  </Button>
+                    <Button
+                     onClick={() => setShowCamera(true)} //camera
+                     variant="outline"
+                     size="icon"
+                     className="rounded-full flex-shrink-0 h-9 w-9"
+                    >
+                    <Camera className="h-4 w-4" />
+                  </Button>
 
 
-  <div className="flex items-center gap-2">
-  {/* Upload Image Button */}
-  <label className="cursor-pointer">
-    📷
-    <input
-      type="file"
-      accept="image/*"
-      className="hidden"
-      onChange={(e) => {
-        const file = e.target.files?.[0];
-        if (file) {
-          const reader = new FileReader();
-          reader.onloadend = () => setAttachedImage(reader.result as string);
-          reader.readAsDataURL(file);
-        }
-      }}
-    />
-  </label>
-</div>
+                <div className="flex items-center gap-2">
+                 {/* Upload Image Button */}
+                 <label className="cursor-pointer">
+                    📷
+                       <input
+                        type="file"
+                        accept="image/*"
+                       className="hidden"
+                       onChange={(e) => {
+                       const file = e.target.files?.[0];
+                        if (file) {
+                        const reader = new FileReader();
+                        reader.onloadend = () => setAttachedImage(reader.result as string);
+                        reader.readAsDataURL(file);
+                     }
+                   }}
+                  />
+                </label>
+                </div>
 
 
                   <Button
@@ -1241,17 +1263,17 @@ const handleSendMessage = async () => {
         submitFeedback={submitFeedback}
       />
      
-    {/* Camera modal */}
-    {showCamera && (
+      {/* Camera modal */}
+      {showCamera && (
        <CameraCapture
-    onCapture={(image) => {
-      handleCapture(image);      // handle the captured image
-      setShowCamera(false);      // hide camera after capture
-    }}
-    onClose={() => setShowCamera(false)}  // hide camera if user cancels
-  />
+        onCapture={(image) => {
+        handleCapture(image);      // handle the captured image
+        setShowCamera(false);      // hide camera after capture
+      }}
+      onClose={() => setShowCamera(false)}  // hide camera if user cancels
+    />
 
-    )}
+    )} 
    
     </div>
   );
