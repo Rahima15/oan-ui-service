@@ -37,11 +37,13 @@ interface ChatMessageProps {
   isFeedbackMessage?: boolean;
   isErrorMessage?: boolean;
   errorTranslationKey?: string;
+  imageUrl?: string;
 }
 
 export function ChatMessage({
   message,
   isUser,
+  imageUrl,
   timestamp,
   onPlayAudio,
   onDislike,
@@ -326,6 +328,15 @@ export function ChatMessage({
               ? "bg-primary text-primary-foreground rounded-tr-none word-break-break-word"
               : `${displayMessage.length > 0 ? "bg-muted" : "hidden"} rounded-tl-none`
           )}>
+            
+            {/* ✅ SHOW IMAGE IF PRESENT */}
+  {imageUrl && (
+    <img 
+      src={imageUrl} 
+      alt="uploaded" 
+      className="rounded-lg max-w-[200px] max-h-[200px] mb-2" 
+    />
+  )}
             {isLoading && !isErrorMessage ? (
               <div className={cn(
                 "flex items-center space-x-2 h-6"
@@ -335,6 +346,10 @@ export function ChatMessage({
                 <div className="w-2 h-2 rounded-full bg-current animate-bounce" style={{ animationDelay: "300ms" }}></div>
               </div>
             ) : (
+ 
+
+
+
               <div className="prose prose-sm dark:prose-invert max-w-none">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
@@ -417,3 +432,4 @@ export function ChatMessage({
     </TooltipProvider>
   );
 }
+
