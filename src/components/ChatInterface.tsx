@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Send, Mic, MicOff, ChevronUp, ChevronLeft, ChevronRight, Info } from "lucide-react";
+import { CameraCapture } from "@/components/CameraCapture";
+import { Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -68,11 +70,26 @@ interface Window {
   mediaRecorder?: MediaRecorder | null;
 }
 
+// ✅ Convert base64 to File
+const base64ToFile = (base64String: string, filename: string): File => {
+  const arr = base64String.split(",");
+  const mime = arr[0].match(/:(.*?);/)?.[1];
+  const bstr = atob(arr[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new File([u8arr], filename, { type: mime || "image/png" });
+};
+
+
 export function ChatInterface() {
   const { language, t } = useLanguage();
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
+  const [showCamera, setShowCamera] = useState(false);  //camera
   const [isRecording, setIsRecording] = useState(false);
   const [inputPositioned, setInputPositioned] = useState(true);
   const [rows, setRows] = useState(1);
@@ -85,6 +102,7 @@ export function ChatInterface() {
   const [maxRecordingDuration, setMaxRecordingDuration] = useState(20000); // 8 seconds in milliseconds
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [isMessageLoading, setIsMessageLoading] = useState(false); // Track if a message is currently loading
+  const [attachedImage, setAttachedImage] = useState<File | string | null>(null); //imageattached
 
   // Suggestion related states
   const [displayedSuggestion, setDisplayedSuggestion] = useState("");
@@ -124,6 +142,21 @@ export function ChatInterface() {
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const inputContainerRef = useRef<HTMLDivElement>(null);
+  
+
+//camera
+
+  const handleImageCapture = (file: File) => {
+    setAttachedImage(file); // Save File object
+  };
+
+// ✅ Handle camera image capture
+const handleCapture = (base64: string) => {
+  const file = base64ToFile(base64, "camera-image.png");
+  handleImageCapture(file); // Save as File, not base64
+};
+
+
 
   const { stopAudio } = useTts();
 
@@ -151,6 +184,19 @@ export function ChatInterface() {
       window.removeEventListener('resize', updateInputHeight);
     };
   }, []);
+
+  //attacheimage
+  useEffect(() => {
+  let objectUrl: string | null = null;
+  if (attachedImage instanceof File) {
+    objectUrl = URL.createObjectURL(attachedImage);
+  }
+
+  return () => {
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+  };
+}, [attachedImage]);
+
 
   // Helper functions for managing messages
   const addMessage = (text: string, isUser: boolean, options = {}): string => {
@@ -290,41 +336,42 @@ export function ChatInterface() {
     return () => clearInterval(cycleTimer);
   }, [allSuggestions]);
 
-  // Handle text message sending
-  const handleSendMessage = async () => {
-    if (inputValue.trim() === "" || isMessageLoading) return;
+  // Handle text message sending and image too
+const handleSendMessage = async () => {
+  if (inputValue.trim() === "" && !attachedImage) return;
 
-    if (!inputPositioned) {
-      setInputPositioned(true);
-    }
-    scrollToBottomOfMessages();
-    // Add user message
-    const userMessageId = addMessage(inputValue, true);
-    
-    // Add loading message for bot
-    const loadingMessageId = addMessage("", false, { isLoading: true });
-    
-    // Set message loading state
-    setIsMessageLoading(true);
-    
-    // Clear input
-    setInputValue("");
+  // 1️⃣ Show user message in chat immediately
+  const userMessageId = addMessage(inputValue || "📷 Image", true, {
+    isImage: !!attachedImage,
+    imageUrl: attachedImage || undefined,
+  });
 
-    try {
-      await sendMessageToApi(inputValue, loadingMessageId);
-    } catch (error) {
-      console.error("Error sending message:", error);
-      updateMessage(loadingMessageId, {
-        text: '',
-        isLoading: false,
-        isErrorMessage: true,
-        errorTranslationKey: 'toast.apiError.description',
-      });
-    } finally {
-      // Reset loading state when done
-      setIsMessageLoading(false);
-    }
-  };
+  // 2️⃣ Clear input and attached image immediately
+  setInputValue("");
+  setAttachedImage(null);
+
+  // 3️⃣ Add loading message for bot
+  const botMessageId = addMessage("", false, { isLoading: true });
+  setIsMessageLoading(true);
+
+  try {
+    // 4️⃣ Send the message (text or image) via your working API function
+    await sendMessageToApi(inputValue, botMessageId, attachedImage);
+  } catch (error) {
+    console.error("Error sending message:", error);
+
+    updateMessage(botMessageId, {
+      text: "Error while sending message.",
+      isLoading: false,
+      isErrorMessage: true,
+    });
+  } finally {
+    setIsMessageLoading(false);
+  }
+};
+
+
+
 
   // When an error occurs, ensure the UI updates completely
   const forceUIRefresh = () => {
@@ -341,7 +388,7 @@ export function ChatInterface() {
   };
 
   // Core API communication function
-  const sendMessageToApi = async (text: string, loadingMessageId: string) => {
+  const sendMessageToApi = async (text: string, loadingMessageId: string,    attachedImage?: File | string | null) => {
     // Determine target and source language
     const targetLang = language;
     let sourceLang = "en"; // Default source language
@@ -367,6 +414,11 @@ export function ChatInterface() {
         questionText: text
       });
       
+      //image
+      if (attachedImage) {
+  console.log("📸 Sending image with message:", attachedImage);
+}
+
       const response = await apiService.sendUserQuery(
         text,
         currentSession,
@@ -380,9 +432,11 @@ export function ChatInterface() {
             text: streamingText,
             isStreaming: true,
             questionId,
-            questionText: text
+            questionText: text,
+           
           });
-        }
+        }, 
+       
       ) as ChatResponse;
 
       if (response && response.response) {
@@ -1059,6 +1113,37 @@ export function ChatInterface() {
                     </div>
                   </div>
                 )}
+                 
+
+<div
+  ref={inputContainerRef}
+  className="input-container"
+  style={{
+    position: 'relative',
+    padding: '12px',
+   
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  }}
+>
+  {/* 📸 Image preview inside input container */}
+{attachedImage && (
+  <div className="relative mb-2 px-3">
+    <img
+      src={attachedImage instanceof File ? URL.createObjectURL(attachedImage) : attachedImage}
+      alt="preview"
+      className="w-32 h-32 object-cover rounded-lg border"
+    />
+    <button
+      onClick={() => setAttachedImage(null)}
+      className="absolute top-1 right-4 bg-black bg-opacity-50 text-white rounded-full p-1"
+    >
+      ✕
+    </button>
+  </div>
+)}
+
                 <div className="flex items-center gap-2 bg-background rounded-lg border border-border p-2">
                   <Textarea
                     ref={textareaRef}
@@ -1089,6 +1174,39 @@ export function ChatInterface() {
                       <Mic className="h-5 w-5" />
                     )}
                   </Button>
+                    
+                    
+  <Button
+    onClick={() => setShowCamera(true)} //camera
+    variant="outline"
+    size="icon"
+    className="rounded-full flex-shrink-0 h-9 w-9"
+  >
+    <Camera className="h-4 w-4" />
+  </Button>
+
+
+  <div className="flex items-center gap-2">
+  {/* Upload Image Button */}
+  <label className="cursor-pointer">
+    📷
+    <input
+      type="file"
+      accept="image/*"
+      className="hidden"
+      onChange={(e) => {
+        const file = e.target.files?.[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onloadend = () => setAttachedImage(reader.result as string);
+          reader.readAsDataURL(file);
+        }
+      }}
+    />
+  </label>
+</div>
+
+
                   <Button
                     onClick={handleSendMessage}
                     disabled={inputValue.trim() === "" || isMessageLoading}
@@ -1108,6 +1226,7 @@ export function ChatInterface() {
             </div>
           </div>
         </div>
+        </div>
       )}
       
       <FeedbackForm
@@ -1121,6 +1240,19 @@ export function ChatInterface() {
         feedbackAudioLevel={feedbackAudioLevel}
         submitFeedback={submitFeedback}
       />
+     
+    {/* Camera modal */}
+    {showCamera && (
+       <CameraCapture
+    onCapture={(image) => {
+      handleCapture(image);      // handle the captured image
+      setShowCamera(false);      // hide camera after capture
+    }}
+    onClose={() => setShowCamera(false)}  // hide camera if user cancels
+  />
+
+    )}
+   
     </div>
   );
 }
